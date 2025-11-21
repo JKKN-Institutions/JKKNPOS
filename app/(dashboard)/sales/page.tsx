@@ -264,7 +264,7 @@ export default function SalesPage() {
   )
 
   return (
-    <div className="h-[calc(100vh-7rem)] md:h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-4">
+    <div className="h-[calc(100vh-4rem)] md:h-[calc(100vh-5rem)] lg:h-[calc(100vh-6rem)] flex flex-col lg:flex-row gap-3 md:gap-4">
       {/* Left Side - Items */}
       <div className="flex-1 flex flex-col min-h-0">
         {/* Search & Filters */}
@@ -366,13 +366,13 @@ export default function SalesPage() {
       </div>
 
       {/* Mobile Cart Button */}
-      <div className="lg:hidden fixed bottom-4 right-4 z-50">
+      <div className="lg:hidden fixed bottom-16 right-3 z-50">
         <Sheet open={cartSheetOpen} onOpenChange={setCartSheetOpen}>
           <SheetTrigger asChild>
-            <Button size="lg" className="rounded-full h-16 w-16 shadow-xl shadow-emerald-500/30 bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 relative transition-all duration-300 hover:scale-105">
-              <ShoppingCart className="h-7 w-7" />
+            <Button size="icon" className="rounded-full h-10 w-10 shadow-lg shadow-emerald-500/30 bg-gradient-to-br from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 relative transition-all duration-300 active:scale-95">
+              <ShoppingCart className="h-4 w-4" />
               {cart.items.length > 0 && (
-                <Badge className="absolute -top-1 -right-1 h-7 w-7 rounded-full p-0 flex items-center justify-center bg-orange-500 border-2 border-white font-bold">
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center bg-orange-500 border-2 border-white text-[10px] font-bold">
                   {cart.getItemCount()}
                 </Badge>
               )}

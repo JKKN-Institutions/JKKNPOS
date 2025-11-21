@@ -33,17 +33,15 @@ export function Header({ user, businessName, onSignOut }: HeaderProps) {
     .slice(0, 2) || "U"
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
-      {/* Spacer for mobile menu button */}
-      <div className="w-12 lg:hidden" />
-
+    <header className="sticky top-0 z-30 flex h-16 md:h-20 items-center gap-3 md:gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-6">
+      
       {/* Search */}
       <div className="flex-1 max-w-xl">
         <div className="relative group">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground transition-colors group-focus-within:text-primary" />
           <Input
             placeholder="Search products, customers..."
-            className="pl-11 pr-20 h-11 bg-muted/40 border-0 rounded-xl text-sm placeholder:text-muted-foreground/60 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
+            className="pl-11 pr-12 md:pr-20 h-9 md:h-11 bg-muted/40 border-0 rounded-xl text-sm placeholder:text-muted-foreground/60 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:bg-background transition-all"
           />
           <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden md:inline-flex h-6 items-center gap-1 rounded-md border bg-muted px-2 font-mono text-[10px] font-medium text-muted-foreground">
             <Command className="h-3 w-3" />K
@@ -81,7 +79,7 @@ export function Header({ user, businessName, onSignOut }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="flex items-center gap-3 h-12 pl-2 pr-3 rounded-xl hover:bg-muted/50 transition-all"
+              className="flex items-center gap-2 md:gap-3 h-10 md:h-12 pl-1 md:pl-2 pr-2 md:pr-3 rounded-xl hover:bg-muted/50 transition-all"
             >
               <Avatar className="h-9 w-9 ring-2 ring-primary/10 transition-all group-hover:ring-primary/30">
                 <AvatarImage src="" />

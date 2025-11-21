@@ -6,6 +6,8 @@ import { Sidebar } from "@/components/layout/sidebar"
 import { Header } from "@/components/layout/header"
 import { getClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import { useSidebarStore } from "@/lib/store/sidebar-store"
+import { cn } from "@/lib/utils"
 import type { Profile, Business } from "@/types"
 
 export default function DashboardLayout({
@@ -18,6 +20,7 @@ export default function DashboardLayout({
   const [user, setUser] = useState<Profile | null>(null)
   const [business, setBusiness] = useState<Business | null>(null)
   const [loading, setLoading] = useState(true)
+  const { collapsed } = useSidebarStore()
 
   useEffect(() => {
     // TODO: Remove mock data for production - bypassing auth for testing
@@ -70,13 +73,16 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
       <Sidebar onSignOut={handleSignOut} />
-      <div className="lg:pl-72 transition-all duration-300">
+      <div className={cn(
+        "transition-all duration-300",
+        collapsed ? "lg:pl-20" : "lg:pl-72"
+      )}>
         <Header
           user={user ? { full_name: user.full_name, role: user.role } : undefined}
           businessName={business?.name}
           onSignOut={handleSignOut}
         />
-        <main className="p-4 md:p-6 lg:p-8">
+        <main className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
           {children}
         </main>
       </div>

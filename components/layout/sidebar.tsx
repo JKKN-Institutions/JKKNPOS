@@ -19,8 +19,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
+import { useSidebarStore } from "@/lib/store/sidebar-store"
 
 const menuItems = [
   {
@@ -147,100 +147,142 @@ function NavItem({
   )
 }
 
-// Mobile Sidebar Component
+// Mobile Bottom Navigation with FAB
 function MobileSidebar({ onSignOut }: SidebarProps) {
   const pathname = usePathname()
-  const [open, setOpen] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    setOpen(false)
+    setIsMounted(true)
+  }, [])
+
+  useEffect(() => {
+    setShowMenu(false)
   }, [pathname])
 
+  const isActive = (href: string) => {
+    if (!isMounted) return false
+    if (href === '/') return pathname === '/'
+    return pathname === href || pathname.startsWith(`${href}/`)
+  }
+
+  // Primary nav items (first 4 for bottom nav)
+  const primaryNavItems = menuItems.slice(0, 4)
+  // Secondary items for FAB menu
+  const fabMenuItems = menuItems.slice(4)
+
+  if (!isMounted) return null
+
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden fixed top-4 left-4 z-50 h-10 w-10 rounded-xl bg-background/80 backdrop-blur-lg border shadow-lg"
+    <>
+      {/* Bottom Navigation Bar */}
+      <nav
+        className="fixed bottom-4 left-4 right-20 bg-gradient-to-r from-primary/90 to-primary/75 backdrop-blur-xl border border-white/20 shadow-[0_8px_32px_rgba(0,0,0,0.3)] rounded-full lg:hidden z-50"
+        role="navigation"
+        aria-label="Mobile navigation"
+      >
+        <div className="flex items-center justify-around h-12 px-2">
+          {primaryNavItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.href)
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="relative flex flex-col items-center justify-center transition-all duration-300 ease-out active:scale-95"
+              >
+                {active ? (
+                  <div className="flex flex-row items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/20 backdrop-blur-md border border-white/20 transition-all duration-300">
+                    <Icon className="h-4 w-4 text-white" />
+                    <span className="text-[10px] font-semibold text-white whitespace-nowrap">
+                      {item.title}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center p-2">
+                    <Icon className="h-5 w-5 text-white/70 hover:text-white/90 transition-all duration-300" />
+                  </div>
+                )}
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
+
+      {/* FAB Button */}
+      <div className="fixed bottom-4 right-4 lg:hidden z-50">
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="relative flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 shadow-lg hover:shadow-xl transition-all duration-300 active:scale-95 border-2 border-white/20"
+          aria-label="More options"
         >
-          <Menu className="h-5 w-5" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="left" className="p-0 w-80 border-r-0">
-        <div className="flex h-full flex-col bg-gradient-to-b from-background via-background to-muted/30">
-          {/* Logo Header */}
-          <div className="flex h-20 items-center gap-3 border-b px-6">
-            <div className="relative">
-              <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-lg">
-                <Sparkles className="h-6 w-6 text-primary-foreground" />
+          {showMenu ? (
+            <ChevronLeft className="h-5 w-5 text-white rotate-90" />
+          ) : (
+            <Menu className="h-5 w-5 text-white" />
+          )}
+        </button>
+      </div>
+
+      {/* FAB Menu */}
+      {showMenu && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
+          onClick={() => setShowMenu(false)}
+        >
+          <div
+            className="absolute bottom-20 right-4 left-4 md:left-auto md:right-4 bg-background/95 backdrop-blur-lg rounded-2xl shadow-2xl border overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col p-2 min-w-[180px]">
+              {fabMenuItems.map((item) => {
+                const Icon = item.icon
+                const active = isActive(item.href)
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setShowMenu(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 active:scale-95",
+                      active
+                        ? "bg-gradient-to-r text-white " + item.gradient
+                        : "hover:bg-accent/50"
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="text-sm font-medium">{item.title}</span>
+                  </Link>
+                )
+              })}
+
+              {/* Sign Out in FAB menu */}
+              <div className="border-t mt-2 pt-2">
+                <button
+                  onClick={() => {
+                    setShowMenu(false)
+                    onSignOut?.()
+                  }}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl w-full text-destructive hover:bg-destructive/10 transition-all duration-200 active:scale-95"
+                >
+                  <LogOut className="h-5 w-5" />
+                  <span className="text-sm font-medium">Sign Out</span>
+                </button>
               </div>
-              <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-background" />
             </div>
-            <div>
-              <h1 className="font-bold text-lg tracking-tight">JKKN Dental</h1>
-              <p className="text-xs text-muted-foreground">Point of Sale</p>
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
-            <p className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Main Menu
-            </p>
-            {menuItems.slice(0, 4).map((item) => {
-              const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`))
-              return (
-                <NavItem
-                  key={item.href}
-                  item={item}
-                  isActive={isActive}
-                  onClick={() => setOpen(false)}
-                />
-              )
-            })}
-
-            <div className="my-4 border-t" />
-
-            <p className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Management
-            </p>
-            {menuItems.slice(4).map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
-              return (
-                <NavItem
-                  key={item.href}
-                  item={item}
-                  isActive={isActive}
-                  onClick={() => setOpen(false)}
-                />
-              )
-            })}
-          </nav>
-
-          {/* Sign Out */}
-          <div className="border-t p-4">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 rounded-xl h-12 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-300"
-              onClick={onSignOut}
-            >
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted/50">
-                <LogOut className="h-5 w-5" />
-              </div>
-              <span className="font-medium">Sign Out</span>
-            </Button>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      )}
+    </>
   )
 }
 
 // Desktop Sidebar Component
 function DesktopSidebar({ onSignOut }: SidebarProps) {
   const pathname = usePathname()
-  const [collapsed, setCollapsed] = useState(false)
+  const { collapsed, toggleCollapsed } = useSidebarStore()
 
   return (
     <aside
@@ -272,7 +314,7 @@ function DesktopSidebar({ onSignOut }: SidebarProps) {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleCollapsed}
           className={cn(
             "h-10 w-10 rounded-xl transition-all duration-300",
             collapsed && "rotate-180"

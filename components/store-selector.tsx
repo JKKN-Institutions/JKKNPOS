@@ -52,18 +52,18 @@ export function StoreSelector() {
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
-          className="justify-between gap-2 h-10 px-3 rounded-xl border-dashed"
+          className="justify-between gap-1.5 md:gap-2 h-9 md:h-10 px-2 md:px-3 rounded-lg md:rounded-xl border-dashed"
         >
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span className="hidden sm:inline font-medium truncate max-w-[150px]">
+          <div className="flex items-center gap-1 md:gap-2">
+            <MapPin className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
+            <span className="hidden sm:inline font-medium text-xs md:text-sm truncate max-w-[80px] md:max-w-[150px]">
               {currentStore.name.split(' - ')[1] || currentStore.name}
             </span>
-            <span className="sm:hidden font-medium">
+            <span className="sm:hidden font-medium text-xs">
               {currentStore.code}
             </span>
           </div>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+          <ChevronsUpDown className="h-3 w-3 md:h-4 md:w-4 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[300px]" align="start">
