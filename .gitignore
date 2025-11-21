@@ -35,6 +35,7 @@ yarn-error.log*
 
 # mcp config
 mcp.json
+.mcp.json
 
 # vercel
 .vercel
