@@ -21,7 +21,7 @@ import { useCartStore } from "@/store/cart-store"
 import { formatCurrency } from "@/lib/utils/currency"
 import { ReceiptModal } from "@/components/receipt"
 import { generateReceiptNo, type ReceiptData } from "@/lib/utils/receipt"
-import { getFromStorage, mockStores } from "@/lib/mock-data"
+import { useStoreContext } from "@/store/store-context"
 import type { Profile, PaymentMethod } from "@/types"
 
 interface PaymentModalProps {
@@ -41,6 +41,7 @@ const paymentMethods: { value: PaymentMethod; label: string; icon: React.ReactNo
 export function PaymentModal({ open, onClose, profile, onSuccess }: PaymentModalProps) {
   const supabase = getClient()
   const cart = useCartStore()
+  const { currentStore } = useStoreContext()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>("CASH")
   const [amountPaid, setAmountPaid] = useState("")
@@ -119,19 +120,14 @@ export function PaymentModal({ open, onClose, profile, onSuccess }: PaymentModal
 
       // Stock is updated via database trigger on sale_items insert
 
-      // Get current store for receipt
-      const currentStoreId = getFromStorage('current_store_id', mockStores[0]?.id)
-      const allStores = getFromStorage('mock_stores', mockStores)
-      const currentStore = allStores.find((s: typeof mockStores[0]) => s.id === currentStoreId) || mockStores[0]
-
       // Create receipt data
       const newReceiptData: ReceiptData = {
         receiptNo: saleNumber,
         date: new Date(),
-        storeName: currentStore?.name || "JKKN Dental",
+        storeName: currentStore?.name || "JKKN POS",
         storeAddress: currentStore?.address || "",
         storePhone: currentStore?.phone || "",
-        storeGST: "29AABCU9603R1ZM",
+        storeGST: currentStore?.gstin || "",
         customerName: cart.customer?.name || undefined,
         customerPhone: cart.customer?.phone || undefined,
         items: cart.items.map((item) => ({

@@ -29,7 +29,7 @@ import {
 
 import { getClient } from "@/lib/supabase/client"
 import { customerSchema, type CustomerFormValues } from "@/lib/validations/customer"
-import type { Profile } from "@/types"
+import { useAuth } from "@/hooks/use-auth"
 import type { Database } from "@/types/database.types"
 
 type CustomerInsert = Database['public']['Tables']['customers']['Insert']
@@ -37,8 +37,8 @@ type CustomerInsert = Database['public']['Tables']['customers']['Insert']
 export default function AddCustomerPage() {
   const router = useRouter()
   const supabase = getClient()
+  const { profile, loading: authLoading } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [profile, setProfile] = useState<Profile | null>(null)
 
   const form = useForm<CustomerFormValues>({
     resolver: zodResolver(customerSchema),
@@ -51,21 +51,6 @@ export default function AddCustomerPage() {
       notes: "",
     },
   })
-
-  useEffect(() => {
-    const fetchProfile = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single()
-        setProfile(data)
-      }
-    }
-    fetchProfile()
-  }, [supabase])
 
   const onSubmit = async (data: CustomerFormValues) => {
     if (!profile?.business_id) {

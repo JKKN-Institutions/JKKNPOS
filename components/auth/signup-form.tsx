@@ -51,10 +51,17 @@ export function SignupForm() {
   const onSubmit = async (data: SignupFormValues) => {
     setIsLoading(true)
     try {
-      // Create user
+      // Create user - the database trigger will automatically create business and profile
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            full_name: data.fullName,
+            business_name: data.businessName,
+          },
+        },
       })
 
       if (authError) {
@@ -67,42 +74,10 @@ export function SignupForm() {
         return
       }
 
-      // Create business
-      const { data: business, error: businessError } = await supabase
-        .from("businesses")
-        .insert({
-          name: data.businessName,
-          currency: "INR",
-          tax_rate: 18,
-        } as never)
-        .select()
-        .single()
-
-      if (businessError) {
-        toast.error("Failed to create business")
-        return
-      }
-
-      // Create profile
-      const typedBusiness = business as { id: string }
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          id: authData.user.id,
-          business_id: typedBusiness.id,
-          full_name: data.fullName,
-          role: "OWNER",
-          is_active: true,
-        } as never)
-
-      if (profileError) {
-        toast.error("Failed to create profile")
-        return
-      }
-
-      toast.success("Account created successfully! Please check your email to verify.")
-      router.push("/login")
+      toast.success("Account created! Please check your email to verify your account before signing in.")
+      router.push("/auth/verify-email?email=" + encodeURIComponent(data.email))
     } catch (error) {
+      console.error('Signup error:', error)
       toast.error("An unexpected error occurred")
     } finally {
       setIsLoading(false)

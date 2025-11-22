@@ -49,60 +49,66 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
 
 import { formatCurrency } from "@/lib/utils/currency"
-import { initializeMockData, getFromStorage, saveToStorage, mockStores } from "@/lib/mock-data"
+import { getClient } from "@/lib/supabase/client"
+import type { Database } from "@/types/database.types"
 
-type MockStore = typeof mockStores[0]
+type Business = Database['public']['Tables']['businesses']['Row']
 
 export default function StoresPage() {
   const router = useRouter()
-  const [stores, setStores] = useState<MockStore[]>([])
+  const [stores, setStores] = useState<Business[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
 
-  const fetchStores = useCallback(() => {
-    initializeMockData()
-    let allStores = getFromStorage('mock_stores', mockStores)
+  const fetchStores = useCallback(async () => {
+    try {
+      setLoading(true)
+      const supabase = getClient()
 
-    if (search) {
-      const searchLower = search.toLowerCase()
-      allStores = allStores.filter((s: MockStore) =>
-        s.name.toLowerCase().includes(searchLower) ||
-        s.code.toLowerCase().includes(searchLower) ||
-        s.address.toLowerCase().includes(searchLower)
-      )
+      let query = supabase
+        .from('businesses')
+        .select('*')
+        .order('name')
+
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,address.ilike.%${search}%`)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+      setStores(data || [])
+    } catch (error) {
+      console.error('Error fetching stores:', error)
+      toast.error('Failed to load stores')
+    } finally {
+      setLoading(false)
     }
-
-    setStores(allStores)
-    setLoading(false)
   }, [search])
 
   useEffect(() => {
     fetchStores()
   }, [fetchStores])
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to deactivate this store?")) return
 
-    const allStores = getFromStorage('mock_stores', mockStores)
-    const updated = allStores.map((s: MockStore) =>
-      s.id === id ? { ...s, is_active: false } : s
-    )
-    saveToStorage('mock_stores', updated)
-    toast.success("Store deactivated")
-    fetchStores()
+    try {
+      const supabase = getClient()
+      const { error } = await supabase
+        .from('businesses')
+        .update({ is_active: false })
+        .eq('id', id)
+
+      if (error) throw error
+      toast.success("Store deactivated")
+      fetchStores()
+    } catch (error) {
+      toast.error("Failed to deactivate store")
+    }
   }
 
   const totalStores = stores.filter(s => s.is_active).length
-  const totalSales = stores.reduce((sum, s) => sum + s.today_sales, 0)
-  const totalOrders = stores.reduce((sum, s) => sum + s.today_orders, 0)
-
-  const getStoreTypeIcon = (type: string) => {
-    switch (type) {
-      case 'warehouse': return '📦'
-      case 'kiosk': return '🏪'
-      default: return '🏬'
-    }
-  }
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -146,29 +152,31 @@ export default function StoresPage() {
         <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
             <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
-              <span className="hidden sm:inline">Today's Sales</span>
-              <span className="sm:hidden">Sales</span>
+              <span className="hidden sm:inline">Total Stores</span>
+              <span className="sm:hidden">Total</span>
             </CardTitle>
             <div className="rounded-lg p-1.5 bg-gradient-to-br from-emerald-500 to-teal-500">
-              <IndianRupee className="h-3 w-3 md:h-4 md:w-4 text-white" />
+              <Store className="h-3 w-3 md:h-4 md:w-4 text-white" />
             </div>
           </CardHeader>
           <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-lg md:text-2xl font-bold">{formatCurrency(totalSales)}</div>
+            <div className="text-lg md:text-2xl font-bold">{stores.length}</div>
           </CardContent>
         </Card>
         <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
             <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
-              <span className="hidden sm:inline">Today's Orders</span>
-              <span className="sm:hidden">Orders</span>
+              <span className="hidden sm:inline">GST Enabled</span>
+              <span className="sm:hidden">GST</span>
             </CardTitle>
             <div className="rounded-lg p-1.5 bg-gradient-to-br from-orange-500 to-amber-500">
-              <ShoppingCart className="h-3 w-3 md:h-4 md:w-4 text-white" />
+              <IndianRupee className="h-3 w-3 md:h-4 md:w-4 text-white" />
             </div>
           </CardHeader>
           <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-lg md:text-2xl font-bold">{totalOrders}</div>
+            <div className="text-lg md:text-2xl font-bold">
+              {stores.filter(s => s.gstin).length}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -217,27 +225,32 @@ export default function StoresPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{getStoreTypeIcon(store.type)}</span>
                       <p className="font-medium">{store.name}</p>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">{store.code}</p>
+                    {store.gstin && (
+                      <p className="text-xs text-muted-foreground mt-1">GST: {store.gstin}</p>
+                    )}
                     <div className="flex flex-col gap-1 mt-2">
                       <div className="flex items-center gap-1 text-sm text-muted-foreground">
                         <MapPin className="h-3 w-3" />
-                        <span className="truncate">{store.address}</span>
+                        <span className="truncate">{store.address || "—"}</span>
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Users className="h-3 w-3" />
-                        {store.manager}
-                      </div>
+                      {store.phone && (
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          {store.phone}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 mt-3">
                       <Badge variant={store.is_active ? "default" : "secondary"} className="text-xs">
                         {store.is_active ? "Active" : "Inactive"}
                       </Badge>
-                      <span className="text-sm font-medium text-primary">
-                        {formatCurrency(store.today_sales)}
-                      </span>
+                      {store.gst_type && (
+                        <Badge variant="outline" className="text-xs">
+                          {store.gst_type}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <DropdownMenu>
@@ -295,9 +308,9 @@ export default function StoresPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Store</TableHead>
-                    <TableHead>Manager</TableHead>
-                    <TableHead className="text-right">Today's Sales</TableHead>
-                    <TableHead className="text-right">Orders</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>GST</TableHead>
+                    <TableHead>Tax Rate</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
@@ -306,25 +319,35 @@ export default function StoresPage() {
                   {stores.map((store) => (
                     <TableRow key={store.id} className={!store.is_active ? "opacity-60" : ""}>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl">{getStoreTypeIcon(store.type)}</span>
-                          <div>
-                            <p className="font-medium">{store.name}</p>
-                            <p className="text-sm text-muted-foreground">{store.code}</p>
-                          </div>
+                        <div>
+                          <p className="font-medium">{store.name}</p>
+                          <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                            {store.address || "—"}
+                          </p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          <span>{store.manager}</span>
-                          <span className="text-xs text-muted-foreground">{store.phone}</span>
+                          {store.phone && (
+                            <span className="text-sm">{store.phone}</span>
+                          )}
+                          {store.email && (
+                            <span className="text-xs text-muted-foreground">{store.email}</span>
+                          )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(store.today_sales)}
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm">{store.gstin || "—"}</span>
+                          {store.gst_type && (
+                            <Badge variant="outline" className="w-fit text-xs">
+                              {store.gst_type}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
-                      <TableCell className="text-right">
-                        {store.today_orders}
+                      <TableCell>
+                        {store.tax_rate}%
                       </TableCell>
                       <TableCell>
                         <Badge variant={store.is_active ? "default" : "secondary"}>

@@ -8,7 +8,11 @@ import { getClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { useSidebarStore } from "@/lib/store/sidebar-store"
 import { cn } from "@/lib/utils"
-import type { Profile, Business } from "@/types"
+import { StoreProvider } from "@/store/store-context"
+import type { Database } from "@/types/database.types"
+
+type Profile = Database['public']['Tables']['profiles']['Row']
+type Business = Database['public']['Tables']['businesses']['Row']
 
 export default function DashboardLayout({
   children,
@@ -23,34 +27,65 @@ export default function DashboardLayout({
   const { collapsed } = useSidebarStore()
 
   useEffect(() => {
-    // TODO: Remove mock data for production - bypassing auth for testing
-    const mockUser: Profile = {
-      id: "mock-user-id",
-      business_id: "mock-business-id",
-      full_name: "Test User",
-      phone: null,
-      role: "OWNER",
-      permissions: null,
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+    const fetchUserData = async () => {
+      try {
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+
+        if (authError || !authUser) {
+          router.push('/login')
+          return
+        }
+
+        // Fetch profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .single()
+
+        if (profileError || !profileData) {
+          toast.error("Failed to load profile")
+          router.push('/login')
+          return
+        }
+
+        setUser(profileData as Profile)
+
+        // Fetch business
+        const { data: businessData, error: businessError } = await supabase
+          .from('businesses')
+          .select('*')
+          .eq('id', profileData.business_id)
+          .single()
+
+        if (businessError) {
+          toast.error("Failed to load business")
+        } else {
+          setBusiness(businessData as Business)
+        }
+
+      } catch (error) {
+        console.error('Error fetching user data:', error)
+        toast.error("An error occurred")
+        router.push('/login')
+      } finally {
+        setLoading(false)
+      }
     }
-    const mockBusiness: Business = {
-      id: "mock-business-id",
-      name: "JKKN Dental Store",
-      address: "123 Main St",
-      phone: "9876543210",
-      email: "jkkn@dental.com",
-      tax_rate: 18,
-      currency: "INR",
-      settings: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-    setUser(mockUser)
-    setBusiness(mockBusiness)
-    setLoading(false)
-  }, [])
+
+    fetchUserData()
+
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') {
+        router.push('/login')
+      } else if (event === 'SIGNED_IN') {
+        fetchUserData()
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase, router])
 
   const handleSignOut = async () => {
     try {
@@ -71,21 +106,23 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
-      <Sidebar onSignOut={handleSignOut} />
-      <div className={cn(
-        "transition-all duration-300",
-        collapsed ? "lg:pl-20" : "lg:pl-72"
-      )}>
-        <Header
-          user={user ? { full_name: user.full_name, role: user.role } : undefined}
-          businessName={business?.name}
-          onSignOut={handleSignOut}
-        />
-        <main className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
-          {children}
-        </main>
+    <StoreProvider>
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30">
+        <Sidebar onSignOut={handleSignOut} />
+        <div className={cn(
+          "transition-all duration-300",
+          collapsed ? "lg:pl-20" : "lg:pl-72"
+        )}>
+          <Header
+            user={user ? { full_name: user.full_name || '', role: user.role || 'STAFF' } : undefined}
+            businessName={business?.name || ''}
+            onSignOut={handleSignOut}
+          />
+          <main className="p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </StoreProvider>
   )
 }

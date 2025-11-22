@@ -77,43 +77,38 @@ export function useAuth() {
   }
 
   const signUp = async (email: string, password: string, fullName: string, businessName: string) => {
-    // Create user
+    // Create user with email confirmation
+    // The database trigger will automatically create business and profile
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        data: {
+          full_name: fullName,
+          business_name: businessName,
+        },
+      },
     })
 
     if (authError) throw authError
     if (!authData.user) throw new Error('User creation failed')
 
-    // Create business
-    const { data: businessData, error: businessError } = await supabase
-      .from('businesses')
-      .insert({
-        name: businessName,
-        currency: 'INR',
-        tax_rate: 18,
-      } as never)
-      .select()
-      .single()
-
-    if (businessError) throw businessError
-    const typedBusiness = businessData as { id: string }
-
-    // Create profile
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .insert({
-        id: authData.user.id,
-        business_id: typedBusiness.id,
-        full_name: fullName,
-        role: 'OWNER',
-        is_active: true,
-      } as never)
-
-    if (profileError) throw profileError
-
     return authData
+  }
+
+  const resetPassword = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    })
+    if (error) throw error
+  }
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    })
+    if (error) throw error
   }
 
   const signOut = async () => {
@@ -129,6 +124,8 @@ export function useAuth() {
     signIn,
     signUp,
     signOut,
+    resetPassword,
+    updatePassword,
     isAuthenticated: !!user,
   }
 }

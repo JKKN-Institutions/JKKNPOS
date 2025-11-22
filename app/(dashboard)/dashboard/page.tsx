@@ -18,7 +18,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency } from "@/lib/utils/currency"
-import { initializeMockData, getFromStorage, mockItems, mockCustomers, mockSales } from "@/lib/mock-data"
+import { useAuth } from "@/hooks/use-auth"
+import { getClient } from "@/lib/supabase/client"
 
 interface DashboardStats {
   todaySales: number
@@ -26,15 +27,11 @@ interface DashboardStats {
   totalItems: number
   lowStockItems: number
   totalCustomers: number
-  recentSales: {
-    id: string
-    sale_number: string
-    total: number
-    created_at: string
-  }[]
+  recentSales: any[]
 }
 
 export default function DashboardPage() {
+  const { profile, loading: authLoading } = useAuth()
   const [stats, setStats] = useState<DashboardStats>({
     todaySales: 0,
     todayRevenue: 0,
@@ -46,34 +43,49 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    initializeMockData()
+    if (!authLoading && profile?.business_id) {
+      fetchDashboardData()
+    }
+  }, [authLoading, profile])
 
-    const items = getFromStorage('mock_items', mockItems)
-    const customers = getFromStorage('mock_customers', mockCustomers)
-    const sales = getFromStorage('mock_sales', mockSales)
+  const fetchDashboardData = async () => {
+    if (!profile?.business_id) return
 
-    const todaySales = sales.filter(s => s.status === 'COMPLETED').length
-    const todayRevenue = sales.filter(s => s.status === 'COMPLETED').reduce((sum, s) => sum + s.total, 0)
-    const totalItems = items.filter(i => i.is_active).length
-    const lowStockItems = items.filter(i => i.is_active && i.stock <= i.min_stock).length
-    const totalCustomers = customers.length
-    const recentSales = sales.slice(0, 5).map(s => ({
-      id: s.id,
-      sale_number: s.sale_number,
-      total: s.total,
-      created_at: s.created_at,
-    }))
+    try {
+      setLoading(true)
+      const supabase = getClient()
+      const today = new Date().toISOString().split('T')[0]
 
-    setStats({
-      todaySales,
-      todayRevenue,
-      totalItems,
-      lowStockItems,
-      totalCustomers,
-      recentSales,
-    })
-    setLoading(false)
-  }, [])
+      // Get dashboard summary
+      const { data: dashboardData } = await supabase.rpc('get_business_dashboard', {
+        p_business_id: profile.business_id,
+      })
+
+      // Get recent sales
+      const { data: salesData } = await supabase
+        .from('sales')
+        .select('id, sale_number, total, created_at')
+        .eq('business_id', profile.business_id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (dashboardData && typeof dashboardData === 'object' && !Array.isArray(dashboardData)) {
+        const data = dashboardData as any
+        setStats({
+          todaySales: data.total_sales_count || 0,
+          todayRevenue: data.total_revenue || 0,
+          totalItems: data.total_items || 0,
+          lowStockItems: data.low_stock_count || 0,
+          totalCustomers: data.total_customers || 0,
+          recentSales: salesData || [],
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const statCards = [
     {

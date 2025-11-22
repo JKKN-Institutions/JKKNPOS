@@ -12,59 +12,58 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-import { getFromStorage, saveToStorage, mockStores } from "@/lib/mock-data"
+import { getClient } from "@/lib/supabase/client"
 
 export default function AddStorePage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
     name: "",
-    code: "",
-    type: "retail",
-    address: "",
-    manager: "",
-    phone: "",
     email: "",
+    phone: "",
+    address: "",
+    gstin: "",
+    gst_type: "REGULAR" as const,
+    currency: "INR",
     tax_rate: "18",
-    hours: "",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!form.name || !form.code) {
-      toast.error("Store name and code are required")
+    if (!form.name) {
+      toast.error("Store name is required")
       return
     }
 
     setLoading(true)
 
-    const allStores = getFromStorage('mock_stores', mockStores)
+    try {
+      const supabase = getClient()
+      const { error } = await supabase
+        .from('businesses')
+        .insert({
+          name: form.name,
+          email: form.email || null,
+          phone: form.phone || null,
+          address: form.address || null,
+          gstin: form.gstin || null,
+          gst_type: form.gst_type,
+          currency: form.currency,
+          tax_rate: parseFloat(form.tax_rate) || 18,
+          is_active: true,
+        })
 
-    // Check if code already exists
-    if (allStores.some((s: { code: string }) => s.code === form.code)) {
-      toast.error("Store code already exists")
+      if (error) throw error
+
+      toast.success("Store added successfully")
+      router.push("/stores")
+    } catch (error) {
+      console.error('Error adding store:', error)
+      toast.error("Failed to add store")
+    } finally {
       setLoading(false)
-      return
     }
-
-    const newStore = {
-      id: `store-${Date.now()}`,
-      ...form,
-      tax_rate: parseFloat(form.tax_rate) || 18,
-      is_active: true,
-      today_sales: 0,
-      today_orders: 0,
-      staff_count: 0,
-      inventory_items: 0,
-      created_at: new Date().toISOString(),
-    }
-
-    allStores.push(newStore)
-    saveToStorage('mock_stores', allStores)
-
-    toast.success("Store added successfully")
-    router.push("/stores")
   }
 
   return (
@@ -99,57 +98,22 @@ export default function AddStorePage() {
                 <Label htmlFor="name">Store Name *</Label>
                 <Input
                   id="name"
-                  placeholder="JKKN Dental - Branch Name"
+                  placeholder="JKKN Dental Supplies - Chennai Branch"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="code">Store Code *</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="code"
-                  placeholder="BRANCH-001"
-                  value={form.code}
-                  onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                  required
+                  id="email"
+                  type="email"
+                  placeholder="chennai@jkkndental.com"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="type">Store Type</Label>
-                <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="retail">Retail Store</SelectItem>
-                    <SelectItem value="warehouse">Warehouse</SelectItem>
-                    <SelectItem value="kiosk">Kiosk</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manager">Manager Name</Label>
-                <Input
-                  id="manager"
-                  placeholder="Manager Name"
-                  value={form.manager}
-                  onChange={(e) => setForm({ ...form, manager: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Input
-                id="address"
-                placeholder="Full address"
-                value={form.address}
-                onChange={(e) => setForm({ ...form, address: e.target.value })}
-              />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -163,14 +127,51 @@ export default function AddStorePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="currency">Currency</Label>
+                <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                    <SelectItem value="USD">USD - US Dollar</SelectItem>
+                    <SelectItem value="EUR">EUR - Euro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="address">Address</Label>
+              <Input
+                id="address"
+                placeholder="123 Anna Nagar, Chennai - 600040, Tamil Nadu, India"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="gstin">GSTIN</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="store@example.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  id="gstin"
+                  placeholder="33AABCU9603R1ZM"
+                  value={form.gstin}
+                  onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="gst_type">GST Type</Label>
+                <Select value={form.gst_type} onValueChange={(v: "REGULAR" | "COMPOSITION") => setForm({ ...form, gst_type: v })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select GST type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="REGULAR">Regular</SelectItem>
+                    <SelectItem value="COMPOSITION">Composition</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -184,15 +185,6 @@ export default function AddStorePage() {
                   placeholder="18"
                   value={form.tax_rate}
                   onChange={(e) => setForm({ ...form, tax_rate: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hours">Operating Hours</Label>
-                <Input
-                  id="hours"
-                  placeholder="9 AM - 9 PM"
-                  value={form.hours}
-                  onChange={(e) => setForm({ ...form, hours: e.target.value })}
                 />
               </div>
             </div>

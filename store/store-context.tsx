@@ -1,47 +1,76 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { getFromStorage, saveToStorage, mockStores } from '@/lib/mock-data'
+import { getClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
+import type { Database } from '@/types/database.types'
 
-export interface Store {
-  id: string
-  name: string
-  code: string
-  type: string
-  address: string
-  manager: string
-  phone: string
-  email: string
-  tax_rate: number
-  hours: string
-  is_active: boolean
-  today_sales: number
-  today_orders: number
-  staff_count: number
-  inventory_items: number
-  created_at: string
-}
+type Business = Database['public']['Tables']['businesses']['Row']
 
 interface StoreContextType {
-  currentStore: Store | null
-  stores: Store[]
+  currentStore: Business | null
+  stores: Business[]
   switchStore: (storeId: string) => void
   refreshStores: () => void
+  loading: boolean
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [currentStore, setCurrentStore] = useState<Store | null>(null)
-  const [stores, setStores] = useState<Store[]>([])
+  const [currentStore, setCurrentStore] = useState<Business | null>(null)
+  const [stores, setStores] = useState<Business[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = getClient()
 
-  const refreshStores = () => {
-    const allStores = getFromStorage('mock_stores', mockStores)
-    setStores(allStores.filter((s: Store) => s.is_active))
+  const refreshStores = async () => {
+    try {
+      setLoading(true)
 
-    const currentStoreId = getFromStorage('current_store_id', mockStores[0]?.id)
-    const store = allStores.find((s: Store) => s.id === currentStoreId)
-    setCurrentStore(store || allStores[0] || null)
+      // Fetch all businesses (no is_active column in DB yet)
+      const { data: businesses, error } = await supabase
+        .from('businesses')
+        .select('*')
+        .order('name')
+
+      if (error) {
+        console.error('Error fetching businesses:', error)
+        console.error('Error details:', JSON.stringify(error, null, 2))
+        toast.error('Failed to load businesses. Please check your database connection.')
+        return
+      }
+
+      console.log('Businesses fetched:', businesses?.length || 0, 'businesses')
+
+      if (!businesses || businesses.length === 0) {
+        console.warn('No businesses found in database. Please add test data.')
+        console.warn('See TEST_DATA_SETUP_GUIDE.md for instructions')
+        setStores([])
+        setCurrentStore(null)
+        return
+      }
+
+      setStores(businesses)
+
+      // Get current store from localStorage or use first available
+      const storedStoreId = typeof window !== 'undefined'
+        ? localStorage.getItem('current_store_id')
+        : null
+
+      if (storedStoreId) {
+        const store = businesses.find(s => s.id === storedStoreId)
+        setCurrentStore(store || businesses[0])
+      } else {
+        setCurrentStore(businesses[0])
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('current_store_id', businesses[0].id)
+        }
+      }
+    } catch (err) {
+      console.error('Error in refreshStores:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -52,12 +81,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const store = stores.find(s => s.id === storeId)
     if (store) {
       setCurrentStore(store)
-      saveToStorage('current_store_id', storeId)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('current_store_id', storeId)
+      }
     }
   }
 
   return (
-    <StoreContext.Provider value={{ currentStore, stores, switchStore, refreshStores }}>
+    <StoreContext.Provider value={{ currentStore, stores, switchStore, refreshStores, loading }}>
       {children}
     </StoreContext.Provider>
   )

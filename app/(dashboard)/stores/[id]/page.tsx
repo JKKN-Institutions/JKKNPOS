@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Store, Save, Trash2, MapPin, Phone, Mail, Clock, Users, Package, IndianRupee, ShoppingCart } from "lucide-react"
+import { ArrowLeft, Store, Save, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -13,90 +13,139 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Skeleton } from "@/components/ui/skeleton"
 
-import { formatCurrency } from "@/lib/utils/currency"
-import { getFromStorage, saveToStorage, mockStores } from "@/lib/mock-data"
+import { getClient } from "@/lib/supabase/client"
+import type { Database } from "@/types/database.types"
 
-type MockStore = typeof mockStores[0]
+type Business = Database['public']['Tables']['businesses']['Row']
 
 export default function EditStorePage() {
   const router = useRouter()
   const params = useParams()
   const [loading, setLoading] = useState(false)
-  const [store, setStore] = useState<MockStore | null>(null)
+  const [fetchLoading, setFetchLoading] = useState(true)
+  const [store, setStore] = useState<Business | null>(null)
   const [form, setForm] = useState({
     name: "",
-    code: "",
-    type: "retail",
-    address: "",
-    manager: "",
-    phone: "",
     email: "",
+    phone: "",
+    address: "",
+    gstin: "",
+    gst_type: "REGULAR" as const,
+    currency: "INR",
     tax_rate: "18",
-    hours: "",
     is_active: true,
   })
 
   useEffect(() => {
-    const allStores = getFromStorage('mock_stores', mockStores)
-    const found = allStores.find((s: MockStore) => s.id === params.id)
-    if (found) {
-      setStore(found)
-      setForm({
-        name: found.name,
-        code: found.code,
-        type: found.type,
-        address: found.address,
-        manager: found.manager,
-        phone: found.phone,
-        email: found.email,
-        tax_rate: String(found.tax_rate),
-        hours: found.hours,
-        is_active: found.is_active,
-      })
+    const fetchStore = async () => {
+      try {
+        setFetchLoading(true)
+        const supabase = getClient()
+        const { data, error } = await supabase
+          .from('businesses')
+          .select('*')
+          .eq('id', params.id)
+          .single()
+
+        if (error) throw error
+
+        if (data) {
+          setStore(data)
+          setForm({
+            name: data.name,
+            email: data.email || "",
+            phone: data.phone || "",
+            address: data.address || "",
+            gstin: data.gstin || "",
+            gst_type: (data.gst_type || "REGULAR") as "REGULAR" | "COMPOSITION",
+            currency: data.currency || "INR",
+            tax_rate: String(data.tax_rate || 18),
+            is_active: data.is_active,
+          })
+        }
+      } catch (error) {
+        console.error('Error fetching store:', error)
+        toast.error('Failed to load store')
+      } finally {
+        setFetchLoading(false)
+      }
+    }
+
+    if (params.id) {
+      fetchStore()
     }
   }, [params.id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!form.name || !form.code) {
-      toast.error("Store name and code are required")
+    if (!form.name) {
+      toast.error("Store name is required")
       return
     }
 
     setLoading(true)
 
-    const allStores = getFromStorage('mock_stores', mockStores)
-    const updated = allStores.map((s: MockStore) =>
-      s.id === params.id
-        ? {
-            ...s,
-            ...form,
-            tax_rate: parseFloat(form.tax_rate) || 18,
-          }
-        : s
-    )
-    saveToStorage('mock_stores', updated)
+    try {
+      const supabase = getClient()
+      const { error } = await supabase
+        .from('businesses')
+        .update({
+          name: form.name,
+          email: form.email || null,
+          phone: form.phone || null,
+          address: form.address || null,
+          gstin: form.gstin || null,
+          gst_type: form.gst_type,
+          currency: form.currency,
+          tax_rate: parseFloat(form.tax_rate) || 18,
+          is_active: form.is_active,
+        })
+        .eq('id', params.id)
 
-    toast.success("Store updated successfully")
-    router.push("/stores")
+      if (error) throw error
+
+      toast.success("Store updated successfully")
+      router.push("/stores")
+    } catch (error) {
+      console.error('Error updating store:', error)
+      toast.error("Failed to update store")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!confirm("Are you sure you want to deactivate this store?")) return
 
-    const allStores = getFromStorage('mock_stores', mockStores)
-    const updated = allStores.map((s: MockStore) =>
-      s.id === params.id ? { ...s, is_active: false } : s
+    try {
+      const supabase = getClient()
+      const { error } = await supabase
+        .from('businesses')
+        .update({ is_active: false })
+        .eq('id', params.id)
+
+      if (error) throw error
+      toast.success("Store deactivated")
+      router.push("/stores")
+    } catch (error) {
+      toast.error("Failed to deactivate store")
+    }
+  }
+
+  if (fetchLoading) {
+    return (
+      <div className="space-y-4 md:space-y-6">
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
     )
-    saveToStorage('mock_stores', updated)
-    toast.success("Store deactivated")
-    router.push("/stores")
   }
 
   if (!store) {
-    return <div className="p-8 text-center">Loading...</div>
+    return <div className="p-8 text-center">Store not found</div>
   }
 
   return (
@@ -124,46 +173,6 @@ export default function EditStorePage() {
         </Badge>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <IndianRupee className="h-4 w-4" />
-              <span className="text-xs">Today's Sales</span>
-            </div>
-            <p className="text-xl font-bold">{formatCurrency(store.today_sales)}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <ShoppingCart className="h-4 w-4" />
-              <span className="text-xs">Orders</span>
-            </div>
-            <p className="text-xl font-bold">{store.today_orders}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Users className="h-4 w-4" />
-              <span className="text-xs">Staff</span>
-            </div>
-            <p className="text-xl font-bold">{store.staff_count}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Package className="h-4 w-4" />
-              <span className="text-xs">Items</span>
-            </div>
-            <p className="text-xl font-bold">{store.inventory_items}</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
@@ -182,37 +191,37 @@ export default function EditStorePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="code">Store Code *</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="code"
-                  value={form.code}
-                  onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                  required
+                  id="email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
                 />
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="type">Store Type</Label>
-                <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+                <Label htmlFor="phone">Phone</Label>
+                <Input
+                  id="phone"
+                  value={form.phone}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency">Currency</Label>
+                <Select value={form.currency} onValueChange={(v) => setForm({ ...form, currency: v })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="retail">Retail Store</SelectItem>
-                    <SelectItem value="warehouse">Warehouse</SelectItem>
-                    <SelectItem value="kiosk">Kiosk</SelectItem>
+                    <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                    <SelectItem value="USD">USD - US Dollar</SelectItem>
+                    <SelectItem value="EUR">EUR - Euro</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="manager">Manager Name</Label>
-                <Input
-                  id="manager"
-                  value={form.manager}
-                  onChange={(e) => setForm({ ...form, manager: e.target.value })}
-                />
               </div>
             </div>
 
@@ -227,21 +236,25 @@ export default function EditStorePage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
+                <Label htmlFor="gstin">GSTIN</Label>
                 <Input
-                  id="phone"
-                  value={form.phone}
-                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  id="gstin"
+                  value={form.gstin}
+                  onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })}
+                  placeholder="33AABCU9603R1ZM"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                />
+                <Label htmlFor="gst_type">GST Type</Label>
+                <Select value={form.gst_type} onValueChange={(v: "REGULAR" | "COMPOSITION") => setForm({ ...form, gst_type: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="REGULAR">Regular</SelectItem>
+                    <SelectItem value="COMPOSITION">Composition</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -254,14 +267,6 @@ export default function EditStorePage() {
                   step="0.01"
                   value={form.tax_rate}
                   onChange={(e) => setForm({ ...form, tax_rate: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="hours">Operating Hours</Label>
-                <Input
-                  id="hours"
-                  value={form.hours}
-                  onChange={(e) => setForm({ ...form, hours: e.target.value })}
                 />
               </div>
             </div>

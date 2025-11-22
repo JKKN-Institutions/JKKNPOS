@@ -33,22 +33,24 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 
 import { useCartStore } from "@/store/cart-store"
 import { formatCurrency } from "@/lib/utils/currency"
-import { initializeMockData, getFromStorage, mockItems, mockCategories, mockCustomers } from "@/lib/mock-data"
-import type { Profile } from "@/types"
+import { useAuth } from "@/hooks/use-auth"
+import { inventoryService } from "@/lib/services/inventory.service"
+import { customerService } from "@/lib/services/customer.service"
+import type { Database } from "@/types/database.types"
 import { PaymentModal } from "@/components/sales/payment-modal"
 
-type MockItem = typeof mockItems[0]
-type MockCategory = typeof mockCategories[0]
-type MockCustomer = typeof mockCustomers[0]
+type Item = Database['public']['Tables']['items']['Row']
+type Category = Database['public']['Tables']['categories']['Row']
+type Customer = Database['public']['Tables']['customers']['Row']
 
 export default function SalesPage() {
   const router = useRouter()
   const cart = useCartStore()
+  const { profile, loading: authLoading } = useAuth()
 
-  const [items, setItems] = useState<MockItem[]>([])
-  const [categories, setCategories] = useState<MockCategory[]>([])
-  const [customers, setCustomers] = useState<MockCustomer[]>([])
-  const [profile, setProfile] = useState<Profile | null>(null)
+  const [items, setItems] = useState<any[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -58,26 +60,35 @@ export default function SalesPage() {
   const [cartSheetOpen, setCartSheetOpen] = useState(false)
 
   useEffect(() => {
-    initializeMockData()
+    if (!authLoading && profile?.business_id) {
+      fetchData()
+    }
+  }, [authLoading, profile])
 
-    // Mock profile
-    setProfile({
-      id: "mock-user-id",
-      business_id: "mock-business-id",
-      full_name: "Test User",
-      role: "OWNER",
-      phone: null,
-      permissions: {},
-      is_active: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    } as Profile)
+  const fetchData = async () => {
+    if (!profile?.business_id) return
 
-    setItems(getFromStorage('mock_items', mockItems).filter(i => i.is_active))
-    setCategories(getFromStorage('mock_categories', mockCategories))
-    setCustomers(getFromStorage('mock_customers', mockCustomers))
-    setLoading(false)
-  }, [])
+    try {
+      setLoading(true)
+      const [itemsData, categoriesData, customersData] = await Promise.all([
+        inventoryService.getBusinessItems(profile.business_id, {
+          isActive: true,
+          searchTerm: '',
+        }),
+        inventoryService.getCategories(profile.business_id),
+        customerService.getBusinessCustomers(profile.business_id),
+      ])
+
+      setItems(itemsData)
+      setCategories(categoriesData)
+      setCustomers(customersData)
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      toast.error('Failed to load data')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
@@ -96,9 +107,11 @@ export default function SalesPage() {
       c.phone?.includes(customerSearch)
   )
 
-  const handleAddToCart = (item: MockItem) => {
+  const handleAddToCart = (item: any) => {
     const existingItem = cart.items.find((i) => i.item_id === item.id)
-    if (existingItem && existingItem.quantity >= item.stock) {
+    const currentStock = item.stock || 0
+
+    if (existingItem && existingItem.quantity >= currentStock) {
       toast.error("Not enough stock available")
       return
     }
@@ -107,8 +120,8 @@ export default function SalesPage() {
       id: `${item.id}-${Date.now()}`,
       item_id: item.id,
       name: item.name,
-      price: item.price,
-      image_url: null,
+      price: item.sell_price || item.price || 0,
+      image_url: item.image_url || null,
     })
   }
 
@@ -120,8 +133,8 @@ export default function SalesPage() {
     setPaymentOpen(true)
   }
 
-  const handleSelectCustomer = (customer: MockCustomer) => {
-    cart.setCustomer(customer)
+  const handleSelectCustomer = (customer: Customer) => {
+    cart.setCustomer(customer as any)
     setCustomerDialogOpen(false)
     toast.success(`Customer: ${customer.name}`)
   }
@@ -351,10 +364,10 @@ export default function SalesPage() {
                     <h3 className="font-semibold text-xs md:text-sm line-clamp-2 group-hover:text-primary transition-colors">{item.name}</h3>
                     <div className="flex items-center justify-between mt-2 md:mt-3">
                       <span className="font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent text-sm md:text-base">
-                        {formatCurrency(item.price)}
+                        {formatCurrency(item.sell_price || item.price || 0)}
                       </span>
                       <Badge className="text-[10px] md:text-xs px-1.5 md:px-2 bg-primary/10 text-primary hover:bg-primary/20 border-0">
-                        {item.stock} left
+                        {item.stock || 0} left
                       </Badge>
                     </div>
                   </CardContent>

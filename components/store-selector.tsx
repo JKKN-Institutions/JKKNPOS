@@ -1,8 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { Check, ChevronsUpDown, MapPin } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,34 +12,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/utils/currency"
-import { getFromStorage, saveToStorage, mockStores } from "@/lib/mock-data"
-
-type MockStore = typeof mockStores[0]
+import { useStoreContext } from "@/store/store-context"
 
 export function StoreSelector() {
-  const [stores, setStores] = useState<MockStore[]>([])
-  const [currentStore, setCurrentStore] = useState<MockStore | null>(null)
+  const { currentStore, stores, switchStore } = useStoreContext()
 
-  useEffect(() => {
-    const allStores = getFromStorage('mock_stores', mockStores).filter((s: MockStore) => s.is_active)
-    setStores(allStores)
-
-    const currentStoreId = getFromStorage('current_store_id', mockStores[0]?.id)
-    const store = allStores.find((s: MockStore) => s.id === currentStoreId)
-    setCurrentStore(store || allStores[0] || null)
-  }, [])
-
-  const handleSelectStore = (store: MockStore) => {
-    setCurrentStore(store)
-    saveToStorage('current_store_id', store.id)
-    toast.success(`Switched to ${store.name}`)
-  }
-
-  const getStoreTypeIcon = (type: string) => {
-    switch (type) {
-      case 'warehouse': return '📦'
-      case 'kiosk': return '🏪'
-      default: return '🏬'
+  const handleSelectStore = (storeId: string) => {
+    switchStore(storeId)
+    const selectedStore = stores.find(s => s.id === storeId)
+    if (selectedStore) {
+      toast.success(`Switched to ${selectedStore.name}`)
     }
   }
 
@@ -57,26 +37,26 @@ export function StoreSelector() {
           <div className="flex items-center gap-1 md:gap-2">
             <MapPin className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
             <span className="hidden sm:inline font-medium text-xs md:text-sm truncate max-w-[80px] md:max-w-[150px]">
-              {currentStore.name.split(' - ')[1] || currentStore.name}
+              {currentStore.name}
             </span>
             <span className="sm:hidden font-medium text-xs">
-              {currentStore.code}
+              {currentStore.name.substring(0, 10)}
             </span>
           </div>
           <ChevronsUpDown className="h-3 w-3 md:h-4 md:w-4 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-[300px]" align="start">
-        <DropdownMenuLabel>Select Store</DropdownMenuLabel>
+        <DropdownMenuLabel>Select Business</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {stores.map((store) => (
           <DropdownMenuItem
             key={store.id}
-            onClick={() => handleSelectStore(store)}
+            onClick={() => handleSelectStore(store.id)}
             className="cursor-pointer py-3"
           >
             <div className="flex items-center gap-3 w-full">
-              <span className="text-xl">{getStoreTypeIcon(store.type)}</span>
+              <span className="text-xl">🏬</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-medium truncate">{store.name}</span>
@@ -84,12 +64,8 @@ export function StoreSelector() {
                     <Check className="h-4 w-4 text-primary" />
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{store.code}</span>
-                  <span>•</span>
-                  <span className="text-emerald-600 font-medium">
-                    {formatCurrency(store.today_sales)}
-                  </span>
+                <div className="text-xs text-muted-foreground">
+                  {store.email || store.phone || ''}
                 </div>
               </div>
             </div>

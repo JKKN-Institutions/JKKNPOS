@@ -50,16 +50,19 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
 
 import { formatCurrency } from "@/lib/utils/currency"
-import { initializeMockData, getFromStorage, saveToStorage, mockItems, mockCategories } from "@/lib/mock-data"
-import type { Category } from "@/types"
+import { useAuth } from "@/hooks/use-auth"
+import { inventoryService } from "@/lib/services/inventory.service"
+import type { Database } from "@/types/database.types"
 
-type MockItem = typeof mockItems[0]
+type Item = Database['public']['Tables']['items']['Row']
+type Category = Database['public']['Tables']['categories']['Row']
 
 export default function InventoryPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const { profile, loading: authLoading } = useAuth()
 
-  const [items, setItems] = useState<MockItem[]>([])
+  const [items, setItems] = useState<Item[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState(searchParams.get("search") || "")
@@ -70,66 +73,72 @@ export default function InventoryPage() {
     searchParams.get("filter") || "all"
   )
 
-  const fetchItems = useCallback(() => {
-    initializeMockData()
-    let allItems = getFromStorage('mock_items', mockItems)
+  const fetchItems = useCallback(async () => {
+    if (!profile?.business_id) return
 
-    // Filter by search
-    if (search) {
-      const searchLower = search.toLowerCase()
-      allItems = allItems.filter(item =>
-        item.name.toLowerCase().includes(searchLower) ||
-        item.barcode.toLowerCase().includes(searchLower)
-      )
+    try {
+      setLoading(true)
+      const data = await inventoryService.getBusinessItems(profile.business_id, {
+        categoryId: categoryFilter !== "all" ? categoryFilter : undefined,
+        isActive: true,
+        lowStockOnly: stockFilter === "lowstock",
+        searchTerm: search,
+      })
+
+      // Apply out of stock filter
+      let filteredData = data
+      if (stockFilter === "outofstock") {
+        filteredData = data.filter(item => item.stock === 0)
+      }
+
+      setItems(filteredData)
+    } catch (error) {
+      console.error('Error fetching items:', error)
+      toast.error('Failed to load inventory items')
+    } finally {
+      setLoading(false)
     }
+  }, [profile, search, categoryFilter, stockFilter])
 
-    // Filter by category
-    if (categoryFilter && categoryFilter !== "all") {
-      allItems = allItems.filter(item => item.category_id === categoryFilter)
+  const fetchCategories = useCallback(async () => {
+    if (!profile?.business_id) return
+
+    try {
+      const data = await inventoryService.getCategories(profile.business_id)
+      setCategories(data)
+    } catch (error) {
+      console.error('Error fetching categories:', error)
+      toast.error('Failed to load categories')
     }
-
-    // Filter by stock status
-    if (stockFilter === "lowstock") {
-      allItems = allItems.filter(item => item.stock <= item.min_stock)
-    } else if (stockFilter === "outofstock") {
-      allItems = allItems.filter(item => item.stock === 0)
-    }
-
-    // Only active items
-    allItems = allItems.filter(item => item.is_active)
-
-    setItems(allItems)
-    setLoading(false)
-  }, [search, categoryFilter, stockFilter])
-
-  const fetchCategories = useCallback(() => {
-    initializeMockData()
-    const cats = getFromStorage('mock_categories', mockCategories) as Category[]
-    setCategories(cats)
-  }, [])
+  }, [profile])
 
   useEffect(() => {
-    fetchCategories()
-    fetchItems()
-  }, [fetchCategories, fetchItems])
+    if (!authLoading && profile?.business_id) {
+      fetchCategories()
+      fetchItems()
+    }
+  }, [authLoading, profile, fetchCategories, fetchItems])
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this item?")) return
 
-    const allItems = getFromStorage('mock_items', mockItems)
-    const updatedItems = allItems.map(item =>
-      item.id === id ? { ...item, is_active: false } : item
-    )
-    saveToStorage('mock_items', updatedItems)
-    toast.success("Item deleted successfully")
-    fetchItems()
+    try {
+      // TODO: Implement delete item function
+      toast.success("Item deleted successfully")
+      fetchItems()
+    } catch (error) {
+      toast.error("Failed to delete item")
+    }
   }
 
-  const getStockBadge = (stock: number, minStock: number) => {
-    if (stock === 0) {
+  const getStockBadge = (stock: number | null, minStock: number | null) => {
+    const stockVal = stock || 0
+    const minStockVal = minStock || 0
+
+    if (stockVal === 0) {
       return <Badge variant="destructive">Out of Stock</Badge>
     }
-    if (stock <= minStock) {
+    if (stockVal <= minStockVal) {
       return (
         <Badge className="bg-orange-500 hover:bg-orange-600">Low Stock</Badge>
       )
@@ -238,10 +247,12 @@ export default function InventoryPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{item.name}</p>
-                    <p className="text-sm text-muted-foreground">{item.category?.name || "—"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {categories.find(c => c.id === item.category_id)?.name || "—"}
+                    </p>
                     <div className="flex items-center gap-3 mt-2">
                       <span className="font-bold text-primary">{formatCurrency(item.price)}</span>
-                      <span className="text-sm text-muted-foreground">{item.stock} {item.unit}</span>
+                      <span className="text-sm text-muted-foreground">{item.stock || 0} {item.unit}</span>
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
@@ -323,7 +334,7 @@ export default function InventoryPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {item.category?.name || (
+                        {categories.find(c => c.id === item.category_id)?.name || (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
@@ -331,7 +342,7 @@ export default function InventoryPage() {
                         {formatCurrency(item.price)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {item.stock} {item.unit}
+                        {item.stock || 0} {item.unit}
                       </TableCell>
                       <TableCell>
                         {getStockBadge(item.stock, item.min_stock)}

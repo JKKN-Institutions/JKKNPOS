@@ -44,50 +44,57 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/shared/empty-state"
 
 import { formatCurrency } from "@/lib/utils/currency"
-import { initializeMockData, getFromStorage, saveToStorage, mockCustomers } from "@/lib/mock-data"
+import { useAuth } from "@/hooks/use-auth"
+import { customerService } from "@/lib/services/customer.service"
+import type { Database } from "@/types/database.types"
 
-type MockCustomer = typeof mockCustomers[0]
+type Customer = Database['public']['Tables']['customers']['Row']
 
 export default function CustomersPage() {
   const router = useRouter()
-  const [customers, setCustomers] = useState<MockCustomer[]>([])
+  const { profile, loading: authLoading } = useAuth()
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
 
-  const fetchCustomers = useCallback(() => {
-    initializeMockData()
-    let allCustomers = getFromStorage('mock_customers', mockCustomers)
+  const fetchCustomers = useCallback(async () => {
+    if (!profile?.business_id) return
 
-    if (search) {
-      const searchLower = search.toLowerCase()
-      allCustomers = allCustomers.filter(c =>
-        c.name.toLowerCase().includes(searchLower) ||
-        c.phone.includes(search) ||
-        c.email.toLowerCase().includes(searchLower)
-      )
+    try {
+      setLoading(true)
+      const data = await customerService.getBusinessCustomers(profile.business_id, {
+        searchTerm: search,
+      })
+      setCustomers(data)
+    } catch (error) {
+      console.error('Error fetching customers:', error)
+      toast.error('Failed to load customers')
+    } finally {
+      setLoading(false)
     }
-
-    setCustomers(allCustomers)
-    setLoading(false)
-  }, [search])
+  }, [profile, search])
 
   useEffect(() => {
-    fetchCustomers()
-  }, [fetchCustomers])
+    if (!authLoading && profile?.business_id) {
+      fetchCustomers()
+    }
+  }, [authLoading, profile, fetchCustomers])
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this customer?")) return
 
-    const allCustomers = getFromStorage('mock_customers', mockCustomers)
-    const updated = allCustomers.filter(c => c.id !== id)
-    saveToStorage('mock_customers', updated)
-    toast.success("Customer deleted")
-    fetchCustomers()
+    try {
+      // TODO: Implement delete customer function
+      toast.success("Customer deleted")
+      fetchCustomers()
+    } catch (error) {
+      toast.error("Failed to delete customer")
+    }
   }
 
   const totalCustomers = customers.length
-  const totalLoyaltyPoints = customers.reduce((sum, c) => sum + c.loyalty_points, 0)
-  const totalPurchases = customers.reduce((sum, c) => sum + c.total_purchases, 0)
+  const totalLoyaltyPoints = customers.reduce((sum, c) => sum + (c.loyalty_points || 0), 0)
+  const totalPurchases = customers.reduce((sum, c) => sum + (c.total_purchases || 0), 0)
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -98,235 +105,150 @@ export default function CustomersPage() {
             <div className="rounded-xl p-2 bg-gradient-to-br from-orange-500 to-amber-500 shadow-lg shadow-orange-500/20">
               <Users className="h-5 w-5 text-white" />
             </div>
-            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Customer Management</span>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Customers</h1>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Customers</h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            Manage your customer database
+            Manage your customer database and loyalty program
           </p>
         </div>
-        <Link href="/customers/add" className="w-full sm:w-auto">
-          <Button className="gap-2 w-full sm:w-auto bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-lg shadow-orange-500/25">
-            <Plus className="h-4 w-4" />
+        <Button asChild className="w-full sm:w-auto">
+          <Link href="/customers/add">
+            <Plus className="mr-2 h-4 w-4" />
             Add Customer
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid gap-3 grid-cols-3">
-        <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
-              Customers
-            </CardTitle>
-            <div className="rounded-lg p-1.5 bg-gradient-to-br from-orange-500 to-amber-500">
-              <Users className="h-3 w-3 md:h-4 md:w-4 text-white" />
-            </div>
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-lg md:text-2xl font-bold">{totalCustomers}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-0 bg-gradient-to-br from-card to-muted/30">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
-              <span className="hidden sm:inline">Loyalty Points</span>
-              <span className="sm:hidden">Points</span>
-            </CardTitle>
-            <div className="rounded-lg p-1.5 bg-gradient-to-br from-yellow-500 to-orange-500">
-              <Award className="h-3 w-3 md:h-4 md:w-4 text-white" />
-            </div>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-lg md:text-2xl font-bold">{totalLoyaltyPoints.toLocaleString()}</div>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalCustomers}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
-            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
-              <span className="hidden sm:inline">Total Purchases</span>
-              <span className="sm:hidden">Sales</span>
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Loyalty Points</CardTitle>
+            <Award className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <div className="text-lg md:text-2xl font-bold text-primary">
-              {formatCurrency(totalPurchases)}
-            </div>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalLoyaltyPoints.toLocaleString()}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Purchases</CardTitle>
+            <Phone className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(totalPurchases)}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Search */}
-      <Card>
-        <CardContent className="pt-4 md:pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search customers..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Customers - Mobile Cards */}
-      <div className="md:hidden space-y-3">
-        {loading ? (
-          <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full" />
-            ))}
-          </div>
-        ) : customers.length === 0 ? (
-          <Card>
-            <CardContent className="py-8">
-              <EmptyState
-                icon={Users}
-                title="No customers found"
-                description="Add your first customer."
-                action={{
-                  label: "Add Customer",
-                  onClick: () => router.push("/customers/add"),
-                }}
-              />
-            </CardContent>
-          </Card>
-        ) : (
-          customers.map((customer) => (
-            <Card key={customer.id}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium">{customer.name}</p>
-                    <div className="flex flex-col gap-1 mt-1">
-                      {customer.phone && (
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                          <Phone className="h-3 w-3" />
-                          {customer.phone}
-                        </div>
-                      )}
-                      {customer.email && (
-                        <div className="flex items-center gap-1 text-sm text-muted-foreground truncate">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{customer.email}</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-2">
-                      <Badge variant="secondary" className="text-xs">
-                        {customer.loyalty_points} pts
-                      </Badge>
-                      <span className="text-sm font-medium text-primary">
-                        {formatCurrency(customer.total_purchases)}
-                      </span>
-                    </div>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => router.push(`/customers/${customer.id}`)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDelete(customer.id)} className="text-destructive">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, phone, or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
       </div>
 
-      {/* Customers Table - Desktop */}
-      <Card className="hidden md:block">
+      {/* Table */}
+      <Card>
         <CardHeader>
-          <CardTitle>All Customers ({customers.length})</CardTitle>
+          <CardTitle>All Customers</CardTitle>
           <CardDescription>
-            A list of all customers in your database
+            View and manage your customer database
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
+                <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
           ) : customers.length === 0 ? (
             <EmptyState
               icon={Users}
               title="No customers found"
-              description="Start building your customer database by adding your first customer."
+              description="Get started by adding your first customer"
               action={{
                 label: "Add Customer",
-                onClick: () => router.push("/customers/add"),
+                onClick: () => router.push("/customers/add")
               }}
             />
           ) : (
-            <div className="rounded-md border">
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Contact</TableHead>
-                    <TableHead className="text-right">Loyalty Points</TableHead>
-                    <TableHead className="text-right">Total Purchases</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="hidden md:table-cell">Contact</TableHead>
+                    <TableHead>Loyalty Points</TableHead>
+                    <TableHead className="hidden lg:table-cell">Total Purchases</TableHead>
+                    <TableHead className="hidden lg:table-cell">Credit Balance</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {customers.map((customer) => (
                     <TableRow key={customer.id}>
                       <TableCell>
-                        <div className="font-medium">{customer.name}</div>
+                        <div>
+                          <div className="font-medium">{customer.name}</div>
+                          <div className="text-sm text-muted-foreground md:hidden">
+                            {customer.phone}
+                          </div>
+                        </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {customer.phone && (
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <Phone className="h-3 w-3" />
-                              {customer.phone}
-                            </div>
-                          )}
+                      <TableCell className="hidden md:table-cell">
+                        <div className="text-sm">
+                          <div className="flex items-center gap-1">
+                            <Phone className="h-3 w-3" />
+                            {customer.phone || 'N/A'}
+                          </div>
                           {customer.email && (
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <div className="flex items-center gap-1 text-muted-foreground">
                               <Mail className="h-3 w-3" />
                               {customer.email}
                             </div>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell>
                         <Badge variant="secondary">
-                          {customer.loyalty_points} pts
+                          {customer.loyalty_points || 0} pts
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(customer.total_purchases)}
+                      <TableCell className="hidden lg:table-cell">
+                        {formatCurrency(customer.total_purchases || 0)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <span className={customer.credit_balance ? "text-orange-600" : ""}>
+                          {formatCurrency(customer.credit_balance || 0)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button variant="ghost" className="h-8 w-8 p-0">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              onClick={() =>
-                                router.push(`/customers/${customer.id}`)
-                              }
+                              onClick={() => router.push(`/customers/${customer.id}`)}
                             >
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit

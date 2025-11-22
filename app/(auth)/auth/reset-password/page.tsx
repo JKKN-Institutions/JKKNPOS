@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -14,56 +14,79 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-const loginSchema = z.object({
-  email: z.string().email("Please enter a valid email"),
+const resetPasswordSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 })
 
-type LoginFormValues = z.infer<typeof loginSchema>
+type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>
 
-export function LoginForm() {
+export default function ResetPasswordPage() {
   const router = useRouter()
   const supabase = getClient()
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [isValidSession, setIsValidSession] = useState(false)
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+  } = useForm<ResetPasswordFormValues>({
+    resolver: zodResolver(resetPasswordSchema),
     defaultValues: {
-      email: "",
       password: "",
+      confirmPassword: "",
     },
   })
 
-  const onSubmit = async (data: LoginFormValues) => {
+  useEffect(() => {
+    // Check if user has a valid session (from email link)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setIsValidSession(true)
+      } else {
+        toast.error("Invalid or expired reset link")
+        router.push("/auth/forgot-password")
+      }
+    })
+  }, [supabase, router])
+
+  const onSubmit = async (data: ResetPasswordFormValues) => {
     setIsLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: data.email,
+      const { error } = await supabase.auth.updateUser({
         password: data.password,
       })
 
       if (error) {
-        if (error.message.includes("Email not confirmed")) {
-          toast.error("Please verify your email address before signing in. Check your inbox for the verification link.")
-        } else {
-          toast.error(error.message)
-        }
+        toast.error(error.message)
         return
       }
 
-      toast.success("Welcome back!")
-      router.push("/dashboard")
-      router.refresh()
+      toast.success("Password updated successfully!")
+      router.push("/login")
     } catch (error) {
       toast.error("An unexpected error occurred")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (!isValidSession) {
+    return (
+      <Card className="w-full shadow-lg">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl font-bold">Loading...</CardTitle>
+        </CardHeader>
+        <CardContent className="flex justify-center py-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -72,41 +95,20 @@ export function LoginForm() {
         <div className="mx-auto mb-4 h-12 w-12 rounded-xl bg-primary flex items-center justify-center">
           <span className="text-primary-foreground font-bold text-lg">JK</span>
         </div>
-        <CardTitle className="text-2xl font-bold">Welcome Back</CardTitle>
+        <CardTitle className="text-2xl font-bold">Reset Password</CardTitle>
         <CardDescription>
-          Sign in to JKKN Dental Store POS
+          Enter your new password below
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="name@example.com"
-              autoComplete="email"
-              disabled={isLoading}
-              {...register("email")}
-            />
-            {errors.email && (
-              <p className="text-sm text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
-              <a href="/auth/forgot-password" className="text-sm text-primary hover:underline">
-                Forgot password?
-              </a>
-            </div>
+            <Label htmlFor="password">New Password</Label>
             <div className="relative">
               <Input
                 id="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter your password"
-                autoComplete="current-password"
+                placeholder="Create a new password"
                 disabled={isLoading}
                 {...register("password")}
               />
@@ -129,18 +131,25 @@ export function LoginForm() {
             )}
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              placeholder="Confirm your new password"
+              disabled={isLoading}
+              {...register("confirmPassword")}
+            />
+            {errors.confirmPassword && (
+              <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+            )}
+          </div>
+
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Sign In
+            Reset Password
           </Button>
         </form>
-
-        <div className="mt-6 text-center text-sm">
-          <span className="text-muted-foreground">Don&apos;t have an account? </span>
-          <a href="/signup" className="font-medium text-primary hover:underline">
-            Sign up
-          </a>
-        </div>
       </CardContent>
     </Card>
   )
