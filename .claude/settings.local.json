@@ -77,7 +77,13 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(npx tsc --noEmit)",
       "Bash(npm uninstall:*)",
-      "Bash(NUL)"
+      "Bash(NUL)",
+      "Bash(npx -y @context7/mcp-server:*)",
+      "Bash(npx -y @upstash/context7-mcp --help)",
+      "Bash(python:*)",
+      "Bash(echo:*)",
+      "Skill(skill-creator)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []
@@ -86,6 +92,8 @@
   "enabledMcpjsonServers": [
     "supabase",
     "filesystem",
-    "context7"
+    "context7",
+    "actor-critic-thinking",
+    "chrome-devtools"
   ]
 }
